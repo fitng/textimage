@@ -11,22 +11,23 @@ with the next character from a text file, colored with the pixel's color.
 
 Requires [Rust](https://rustup.rs) (stable).
 
-```bash
+```
 git clone https://github.com/fitng/textimage
 cd textimage
-cargo run --release -- --image test/picture.jpg --text test/text.txt
+cargo run --release -- --i test/picture.jpg --t test/text.txt
 ```
 
 ## Usage
 
 ```
-textimage --image <FILE> --text <FILE>
+cargo run --release --i <FILE> --text <FILE>
 ```
 
 | Option | Description |
 |---|---|
 | `-i, --image` | Path to the image (PNG, JPEG, WebP, ...) |
 | `-t, --text`  | Path to the text file the characters are taken from |
+| `-s, --stdout` | Write result to stdout |
 
 Press `q` or `Esc` to quit. The picture is redrawn when the terminal is resized.
 

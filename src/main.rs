@@ -17,13 +17,17 @@ use std::io::{Write, stdout};
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Image
+    /// Path to the image
     #[arg(short, long)]
     image: String,
 
-    /// Text
+    /// Path to the text
     #[arg(short, long)]
     text: String,
+
+    /// Write in stdout
+    #[arg(short, long, default_value_t = false)]
+    stdout: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -35,20 +39,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     if chars.is_empty() {
         return Err("text file is empty".into());
     }
+    if args.stdout {
+        let (w, h) = terminal::size()?;
+        draw(&img, &chars, w, h, args.stdout)?;
+    } else {
+        let _guard = TerminalGuard::new()?;
 
-    let _guard = TerminalGuard::new()?;
+        let (w, h) = terminal::size()?;
+        draw(&img, &chars, w, h, args.stdout)?;
 
-    let (w, h) = terminal::size()?;
-    draw(&img, &chars, w, h)?;
-
-    loop {
-        match event::read()? {
-            Event::Key(k) if k.kind == KeyEventKind::Press => match k.code {
-                KeyCode::Char('q') | KeyCode::Esc => break,
+        loop {
+            match event::read()? {
+                Event::Key(k) if k.kind == KeyEventKind::Press => match k.code {
+                    KeyCode::Char('q') | KeyCode::Esc => break,
+                    _ => {}
+                },
+                Event::Resize(w, h) => draw(&img, &chars, w, h, args.stdout)?,
                 _ => {}
-            },
-            Event::Resize(w, h) => draw(&img, &chars, w, h)?,
-            _ => {}
+            }
         }
     }
 
@@ -60,22 +68,35 @@ fn draw(
     chars: &[char],
     term_w: u16,
     term_h: u16,
+    std: bool,
 ) -> Result<(), Box<dyn Error>> {
     const ALPHA_THRESHOLD: u8 = 200;
     const LUMA_THRESHOLD: f32 = 25.0;
 
-    let resized = resize_for_terminal(img, term_w, term_h);
+    let resized = if std {
+        resize_for_terminal(img, term_w, term_h)
+    } else {
+        resize_for_terminal(img, term_w, term_h)
+    };
+
     let (w, h) = resized.dimensions();
     let x_off = term_w.saturating_sub(w as u16) / 2;
     let y_off = term_h.saturating_sub(h as u16) / 2;
     let has_alpha = img.color().has_alpha();
+    let mut old_y = 0;
 
     let mut out = stdout();
-    queue!(out, Clear(ClearType::All), SetAttribute(Attribute::Bold))?;
-
+    if std {
+        queue!(out, SetAttribute(Attribute::Bold))?;
+    } else {
+        queue!(out, Clear(ClearType::All), SetAttribute(Attribute::Bold))?;
+    }
     let mut pointer = 0;
     for (x, y, pixel) in resized.enumerate_pixels() {
-        if x == 0 {
+        if std && y > old_y {
+            queue!(out, Print('\n'))?;
+        }
+        if x == 0 && !std {
             queue!(out, MoveTo(x_off, y_off + y as u16))?;
         }
         let Rgba([r, g, b, a]) = *pixel;
@@ -94,8 +115,11 @@ fn draw(
             queue!(out, Print(ch.with(Color::Rgb { r, g, b })))?;
             pointer += 1;
         }
+        old_y = y;
     }
-
+    if std {
+        queue!(out, Print('\n'))?;
+    }
     queue!(out, SetAttribute(Attribute::Reset))?;
     out.flush()?;
     Ok(())
